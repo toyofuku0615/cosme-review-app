@@ -38,6 +38,7 @@ def get_reviews(url: str, max_pages: int) -> pd.DataFrame:
         "User-Agent": "Mozilla/5.0",
         "Accept-Language": "ja-JP,ja;q=0.9"
     })
+
     if not url.endswith("/review/"):
         url = url.rstrip("/") + "/review/"
 
@@ -48,6 +49,7 @@ def get_reviews(url: str, max_pages: int) -> pd.DataFrame:
         items = soup.select("#product-review-list > div")
         if not items:
             break
+
         for item in items:
             # 評価
             score_tag = item.select_one("div.body div.rating.clearfix p.reviewer-rating")
@@ -56,15 +58,13 @@ def get_reviews(url: str, max_pages: int) -> pd.DataFrame:
                 num = re.sub(r"[^0-9.]", "", score_tag.text)
                 rating = float(num) if num else None
 
-            # タグリスト取得とデバッグ表示
-            tags = item.select("div.body div.tag-list.clearfix li")
-            tag_texts = [t.get_text(strip=True) for t in tags]
-            st.write("DEBUG tags:", tag_texts)  # デバッグ出力：タグリストの中身
-
-            # 年齢・肌質・性別
-            age = tag_texts[0] if len(tag_texts) > 0 else "不明"
-            skin = tag_texts[1] if len(tag_texts) > 1 else "不明"
-            sex = tag_texts[2] if len(tag_texts) > 2 else "不明"
+            # プロフィール（div.head div.reviewer-info）
+            prof_tag = item.select_one("div.head div.reviewer-info")
+            prof_txt = prof_tag.get_text(strip=True) if prof_tag else ""
+            parts = prof_txt.split("・")
+            age = parts[0] if len(parts) > 0 else "不明"
+            skin = parts[1] if len(parts) > 1 else "不明"
+            sex = parts[2] if len(parts) > 2 else "不明"
 
             # 本文
             body_tag = item.select_one("div.body p:not(.reviewer-rating):not(.mobile-date)")
@@ -82,11 +82,12 @@ def get_reviews(url: str, max_pages: int) -> pd.DataFrame:
                 "本文": body_txt,
                 "日付": date_txt
             })
+
     return pd.DataFrame(reviews)
 
-# メイン処理
+# メイン画面
 st.title("💄 @cosme Review Insight")
-st.write("迅速にレビューを取得・分析します。ページ数調整可能。")
+st.write("迅速にレビューを取得・分析します。ページ数調整可能。日本語フォント対応。")
 
 if submitted and url_input:
     with st.spinner("レビュー取得中…"):
@@ -147,7 +148,7 @@ if submitted and url_input:
     df['クラスタ'] = km.labels_
     st.dataframe(df[['年代','性別','肌質','評価','クラスタ']])
 
-    # 年代×クラスタ 分布
+    # 年代 × クラスタ 分布
     st.subheader("🔍 年代 × クラスタ 分布")
     seg = pd.crosstab(df['年代'], df['クラスタ'])
     st.dataframe(seg)
