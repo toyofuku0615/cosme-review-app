@@ -52,41 +52,28 @@ def get_reviews(url: str) -> pd.DataFrame:
     while True:
         resp = requests.get(f"{url}?page={page}", headers=headers, timeout=10)
         soup = BeautifulSoup(resp.text, "html.parser")
-        # 複数構造に対応
-        items = soup.select(".p-reviewList__item, .c-section-review__item")
+        # ルートとなるレビュー要素
+        items = soup.select("#product-review-list > div")
         if not items:
             break
         for item in items:
-            # 評価スコア取得（複数パターン）
-            score_tag = item.select_one(".bl-reviewRating__score") or item.select_one(".c-section-review__rating i")
+            # 星評価
+            star_tag = item.select_one("div.body > div.rating.clearfix > p.reviewer-rating.rtg-4")
             rating = None
-            if score_tag:
-                txt = score_tag.text.strip()
-                # star5 => 5, or numeric
-                num = re.sub(r"[^0-9.]", "", txt)
+            if star_tag:
                 try:
-                    rating = float(num)
+                    rating = float(re.sub(r"[^0-9]", "", star_tag.get_text()))
                 except:
-                    pass
-            # プロフィール取得
-            prof = item.select_one(".p-reviewList__profile") or item.select_one(".c-section-review__profile")
-            profile_txt = prof.get_text(" ", strip=True) if prof else ""
-            # 本文抜粋
-            excerpt_tag = item.select_one(".p-reviewList__comment") or item.select_one(".c-section-review__text")
-            excerpt = excerpt_tag.get_text(strip=True) if excerpt_tag else ""
-            # 全文リンク取得（省略）
-            more = item.select_one("a.p-reviewList__moreLink, a.c-section-review__readMore")
-            full_txt = excerpt
-            if more and more.has_attr("href"):
-                time.sleep(0.3)
-                det = requests.get(more['href'], headers=headers, timeout=10)
-                det_soup = BeautifulSoup(det.text, "html.parser")
-                txt = det_soup.select_one(".p-reviewExpand__text") or det_soup.select_one(".c-section-reviewDetail__text")
-                if txt:
-                    full_txt = txt.get_text(strip=True)
-            # 日付取得
-            date_tag = item.select_one(".p-reviewList__date") or item.select_one(".c-section-review__date")
-            date_txt = date_tag.text.strip() if date_tag else ""
+                    rating = None
+            # プロフィール
+            prof_tag = item.select_one("div.head > div.reviewer-info")
+            profile_txt = prof_tag.get_text(" ", strip=True) if prof_tag else ""
+            # 本文（抜粋 or 全文）
+            body_tag = item.select_one("div.body > p")
+            full_txt = body_tag.get_text(strip=True) if body_tag else ""
+            # 日付
+            date_tag = item.select_one("div.body > div.rating.clearfix > p.mobile-date")
+            date_txt = date_tag.get_text(strip=True) if date_tag else ""
             reviews.append({"評価": rating, "属性": profile_txt, "本文": full_txt, "日付": date_txt})
         page += 1
     return pd.DataFrame(reviews)
