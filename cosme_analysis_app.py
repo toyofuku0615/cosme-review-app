@@ -101,12 +101,12 @@ if submitted and url_input:
         st.pyplot(fig3)
         # クラスタリング
         st.subheader("レビュー本文クラスタリング (3 clusters)")
-        tfidf = TfidfVectorizer(max_features=30, stop_words="japanese")
+        tfidf = TfidfVectorizer(max_features=30)
         X = tfidf.fit_transform(df['本文'])
         km = KMeans(n_clusters=3, random_state=42, n_init=10).fit(X)
         df['クラスタ'] = km.labels_
         st.dataframe(df[['年代','性別','肌質','評価','クラスタ']])
-        # 年代×クラスタ
+        # 年代×クラスタ 分布
         st.subheader("年代×クラスタ 分布")
         seg = pd.crosstab(df['年代'], df['クラスタ'])
         st.dataframe(seg)
