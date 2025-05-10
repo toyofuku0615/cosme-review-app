@@ -6,7 +6,7 @@ import streamlit as st
 import matplotlib.pyplot as plt
 # 日本語フォント設定
 plt.rcParams['font.family'] = 'sans-serif'
-plt.rcParams['font.sans-serif'] = ['Arial Unicode MS','Yu Gothic','Meiryo','TakaoPGothic']
+plt.rcParams['font.sans-serif'] = ['Yu Gothic','Meiryo','TakaoPGothic','Noto Sans CJK JP']
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.cluster import KMeans
 from textblob import TextBlob
@@ -17,10 +17,10 @@ st.markdown(
     """
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600&display=swap');
-    html, body, [class*=\"css\"] { font-family: 'Montserrat', sans-serif; }
+    html, body, [class*="css"] { font-family: 'Montserrat', sans-serif; }
     body { background: #FAF8FF; padding:1rem; }
     h1,h2,h3 { color:#7B1FA2; font-weight:600; }
-    .stButton>button, .stDownloadButton>button { background:#7B1FA2; color:#fff; border:none; border-radius:8px; padding:0.5rem 1.2rem; font-weight:600; transition:0.3s; }
+    .stButton>button, .stDownloadButton>button { background:#7B1FA2; color:#fff; border:none; border-radius:8px; padding:0.5rem 1.2rem; font-weight:600; }
     .stButton>button:hover, .stDownloadButton>button:hover { background:#9B4DCC; }
     </style>
     """, unsafe_allow_html=True)
@@ -71,8 +71,10 @@ if submitted and url_input:
         st.error("⚠️ レビューが取得できませんでした。URLまたはページ数を確認してください。")
     else:
         st.success(f"✅ {len(df)} 件のレビューを取得しました！")
-        # 属性分解
-        df[["年代","性別","肌質"]] = df["属性"].str.split("・", expand=True).iloc[:, :3].fillna("不明")
+        # 属性分解：年齢・性別・肌質を抽出
+        df['年齢'] = df['属性'].str.extract(r"(\d+)歳")[0].fillna('不明').apply(lambda x: x+'歳' if x!='不明' else x)
+        df['性別'] = df['属性'].str.extract(r"(男性|女性)")[0].fillna('不明')
+        df['肌質'] = df['属性'].str.extract(r"(乾燥肌|脂性肌|普通肌|混合肌)")[0].fillna('不明')
 
         # メトリクスカード
         c1, c2, c3 = st.columns(3)
@@ -85,7 +87,7 @@ if submitted and url_input:
         with g1:
             st.subheader("年代別平均評価")
             fig, ax = plt.subplots()
-            df.groupby("年代")["評価"].mean().plot.bar(ax=ax, edgecolor="black")
+            df.groupby("年齢")["評価"].mean().plot.bar(ax=ax, edgecolor="black")
             ax.set_ylabel("平均評価")
             st.pyplot(fig)
         with g2:
@@ -99,7 +101,7 @@ if submitted and url_input:
         st.subheader("感情スコア分布")
         df['sentiment'] = df['本文'].apply(lambda x: TextBlob(x).sentiment.polarity)
         fig3, ax3 = plt.subplots()
-        df['sentiment'].hist(bins=20, ax=ax3)
+        df['sentiment'].hist(bins=20, color="#26A69A", edgecolor="white", ax=ax3)
         ax3.set_xlabel("Polarity")
         ax3.set_ylabel("件数")
         st.pyplot(fig3)
@@ -110,11 +112,11 @@ if submitted and url_input:
         X = tfidf.fit_transform(df['本文'])
         km = KMeans(n_clusters=3, random_state=42, n_init=10).fit(X)
         df['クラスタ'] = km.labels_
-        st.dataframe(df[['年代','性別','肌質','評価','クラスタ']])
+        st.dataframe(df[['年齢','性別','肌質','評価','クラスタ']])
 
         # セグメント分布
         st.subheader("年代×クラスタ 分布")
-        seg = pd.crosstab(df['年代'], df['クラスタ'])
+        seg = pd.crosstab(df['年齢'], df['クラスタ'])
         st.dataframe(seg)
 
         # CSVダウンロード
