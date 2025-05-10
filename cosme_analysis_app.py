@@ -4,126 +4,112 @@ import requests
 from bs4 import BeautifulSoup
 import streamlit as st
 import matplotlib.pyplot as plt
+import japanize_matplotlib
+japanize_matplotlib.japanize()
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.cluster import KMeans
 from textblob import TextBlob
 
-# ===== ページ設定 & 日本語フォント設定 =====
+# ===== ページ設定 =====
 st.set_page_config(page_title="@cosme Review Insight", page_icon="💄", layout="wide")
-plt.rcParams['font.family'] = 'sans-serif'
-plt.rcParams['font.sans-serif'] = ['Yu Gothic','Meiryo','TakaoPGothic','Noto Sans CJK JP']
 
-# ===== CSS装飾 =====
-st.markdown("""
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600&display=swap');
-html, body, [class*="css"] { font-family: 'Montserrat', sans-serif; }
-body { background: #FAF8FF; padding:1rem; }
-h1,h2,h3 { color:#7B1FA2; font-weight:600; }
-.stButton>button, .stDownloadButton>button { background:#7B1FA2; color:#fff; border:none; border-radius:8px; padding:0.5rem 1.2rem; font-weight:600; }
-.stButton>button:hover, .stDownloadButton>button:hover { background:#9B4DCC; }
-</style>
-""", unsafe_allow_html=True)
-
-# ===== サイドバー =====
-with st.sidebar:
+# ===== サイドバー設定 =====nwith st.sidebar:
     st.header("🔍 レビュー分析設定")
-    url_input = st.text_input("@cosme商品またはレビューURLを入力", placeholder="https://www.cosme.net/products/10240630/review/")
-    max_pages = st.slider("最大ページ数", 1, 5, 2)
+    url_input = st.text_input("@cosmeの商品ページ/レビューURLを入力", placeholder="例: https://www.cosme.net/products/10240630/review/")
     submitted = st.button("分析開始")
-    st.info("※ /review/ を省略した商品URLでも自動で補完します")
 
 # ===== レビュー取得関数 =====
-def get_reviews(url: str, max_pages: int) -> pd.DataFrame:
+def get_reviews(url: str, max_pages: int = 3) -> pd.DataFrame:
     session = requests.Session()
-    session.headers.update({"User-Agent": "Mozilla/5.0", "Accept-Language": "ja-JP,ja;q=0.9"})
+    session.headers.update({"User-Agent": "Mozilla/5.0", "Accept-Language": "ja-JP,jp;q=0.9"})
+    # URLが商品ページなら /review/ を付与
+    if not url.endswith("/review/"):
+        url = url.rstrip("/") + "/review/"
     reviews = []
-    for page in range(1, max_pages + 1):
+    for page in range(1, max_pages+1):
         resp = session.get(f"{url}?page={page}", timeout=10)
         soup = BeautifulSoup(resp.text, "html.parser")
         items = soup.select("#product-review-list > div")
         if not items:
             break
         for item in items:
-            star = item.select_one("div.body div.rating.clearfix p.reviewer-rating")
-            rating = float(re.sub(r"[^0-9.]", "", star.text)) if star else None
-            prof = item.select_one("div.head div.reviewer-info")
-            profile = prof.get_text(" ", strip=True) if prof else ""
-            body = item.select_one("div.body > p:not(.reviewer-rating):not(.mobile-date)")
-            text = body.get_text(strip=True) if body else ""
-            date = item.select_one("div.body div.rating.clearfix p.mobile-date")
-            date_txt = date.get_text(strip=True) if date else ""
-            reviews.append({"評価": rating, "属性": profile, "本文": text, "日付": date_txt})
+            # 評価
+            score_tag = item.select_one("div.body div.rating.clearfix p.reviewer-rating")
+            rating = float(re.sub(r"[^0-9.]", "", score_tag.text)) if score_tag else None
+            # 属性
+            info_tag = item.select_one("div.head div.reviewer-info")
+            profile_txt = info_tag.get_text(" ", strip=True) if info_tag else ""
+            # 本文
+            body_tag = item.select_one("div.body p:not(.reviewer-rating):not(.mobile-date)")
+            body_txt = body_tag.get_text(strip=True) if body_tag else ""
+            # 投稿日
+            date_tag = item.select_one("div.body div.rating.clearfix p.mobile-date")
+            date_txt = date_tag.text.strip() if date_tag else ""
+            reviews.append({"評価": rating, "属性": profile_txt, "本文": body_txt, "日付": date_txt})
     return pd.DataFrame(reviews)
 
-# ===== メイン =====
+# ===== メイン処理 =====
 st.title("💄 @cosme Review Insight")
-st.caption("迅速にコスメレビューを取得・分析します。最大ページ数で速度調整可能。日本語フォント対応済み。")
+st.write("迅速にレビューを取得・分析します。日本語グラフ対応済み。")
 
 if submitted and url_input:
-    # レビューURL補完
-    if "/review" not in url_input:
-        url = url_input.rstrip('/') + '/review/'
-    else:
-        url = url_input.rstrip('/') + '/'
-
     with st.spinner("レビュー取得中…"):
-        df = get_reviews(url, max_pages)
-
+        df = get_reviews(url_input)
     if df.empty:
-        st.error("⚠️ レビューが取得できませんでした。URLまたはページ数を確認してください。")
-    else:
-        st.success(f"✅ {len(df)} 件のレビューを取得しました！")
-        # 属性分解
-        df['年齢'] = df['属性'].str.extract(r"(\d+)代")[0].fillna('不明').apply(lambda x: x+'代' if x!='不明' else x)
-        df['性別'] = df['属性'].str.extract(r"(男性|女性)")[0].fillna('不明')
-        df['肌質'] = df['属性'].str.extract(r"(乾燥肌|脂性肌|普通肌|混合肌)")[0].fillna('不明')
-
-        # メトリクスカード
-        c1,c2,c3 = st.columns(3)
-        c1.metric("平均評価", f"{df['評価'].mean():.2f}")
-        c2.metric("ポジティブ率", f"{(df['評価']>=5).mean()*100:.1f}%")
-        c3.metric("レビュー数", f"{len(df)} 件")
-
-        # グラフ：年代別/肌質別評価
-        g1,g2 = st.columns(2)
-        with g1:
-            st.subheader("年代別平均評価")
-            fig, ax = plt.subplots()
-            df.groupby("年齢")["評価"].mean().plot.bar(ax=ax, edgecolor="black")
-            ax.set_ylabel("平均評価")
-            ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha='right')
-            st.pyplot(fig)
-        with g2:
-            st.subheader("肌質別平均評価")
-            fig2, ax2 = plt.subplots()
-            df.groupby("肌質")["評価"].mean().plot.bar(ax=ax2, edgecolor="black")
-            ax2.set_ylabel("平均評価")
-            ax2.set_xticklabels(ax2.get_xticklabels(), rotation=45, ha='right')
-            st.pyplot(fig2)
-
-        # 感情スコア分布
-        st.subheader("感情スコア分布")
-        df['sentiment'] = df['本文'].apply(lambda x: TextBlob(x).sentiment.polarity)
-        fig3, ax3 = plt.subplots()
-        df['sentiment'].hist(bins=20, color="#26A69A", edgecolor="white", ax=ax3)
-        ax3.set_xlabel("感情スコア")
-        ax3.set_ylabel("件数")
-        st.pyplot(fig3)
-
-        # クラスタリング
-        st.subheader("レビュー本文クラスタリング (3 clusters)")
-        tfidf = TfidfVectorizer(max_features=30)
-        X = tfidf.fit_transform(df['本文'])
-        km = KMeans(n_clusters=3, random_state=42, n_init=10).fit(X)
-        df['クラスタ'] = km.labels_
-        st.dataframe(df[['年齢','性別','肌質','評価','クラスタ']])
-
-        # セグメント分布
-        st.subheader("年代×クラスタ 分布")
-        seg = pd.crosstab(df['年齢'], df['クラスタ'])
-        st.dataframe(seg)
-
-        # CSVダウンロード
-        csv = df.to_csv(index=False).encode('utf-8-sig')
-        st.download_button("CSVダウンロード", data=csv, file_name="cosme_reviews.csv", mime="text/csv")
+        st.error("⚠️ レビューが取得できませんでした。URLを確認してください。")
+        st.stop()
+    st.success(f"✅ {len(df)} 件のレビューを取得しました！")
+    # 属性分解：年代、性別、肌質
+    df[['年代','性別','肌質']] = df['属性'].str.extract(r'(\d+代)\s*(男性|女性)\s*(.+)')
+    df[['年代','性別','肌質']] = df[['年代','性別','肌質']].fillna('不明')
+    # メトリクス表示
+    col1,col2,col3 = st.columns(3)
+    col1.metric("平均評価", f"{df['評価'].mean():.2f}")
+    col2.metric("最高評価率", f"{(df['評価']>=5).mean()*100:.1f}%")
+    col3.metric("レビュー数", f"{len(df)}")
+    # グラフ：年代別平均評価
+    st.subheader("📊 年代別平均評価")
+    fig1, ax1 = plt.subplots()
+    df.groupby('年代')['評価'].mean().plot(kind='bar', ax=ax1)
+    ax1.set_xlabel('年代')
+    ax1.set_ylabel('平均評価')
+    plt.xticks(rotation=45, ha='right')
+    st.pyplot(fig1)
+    # グラフ：性別別平均評価
+    st.subheader("📊 性別別平均評価")
+    fig1b, ax1b = plt.subplots()
+    df.groupby('性別')['評価'].mean().plot(kind='bar', ax=ax1b)
+    ax1b.set_xlabel('性別')
+    ax1b.set_ylabel('平均評価')
+    plt.xticks(rotation=0)
+    st.pyplot(fig1b)
+    # グラフ：肌質別平均評価
+    st.subheader("📊 肌質別平均評価")
+    fig2, ax2 = plt.subplots()
+    df.groupby('肌質')['評価'].mean().plot(kind='bar', ax=ax2)
+    ax2.set_xlabel('肌質')
+    ax2.set_ylabel('平均評価')
+    plt.xticks(rotation=45, ha='right')
+    st.pyplot(fig2)
+    # 感情スコア分布
+    st.subheader("😊 感情スコア分布")
+    df['感情'] = df['本文'].apply(lambda x: TextBlob(x).sentiment.polarity)
+    fig3, ax3 = plt.subplots()
+    df['感情'].hist(bins=20, ax=ax3)
+    ax3.set_xlabel('感情スコア')
+    ax3.set_ylabel('件数')
+    st.pyplot(fig3)
+    # クラスタリング
+    st.subheader("👥 レビュー本文クラスタリング (3 clusters)")
+    tfidf = TfidfVectorizer(max_features=30)
+    X = tfidf.fit_transform(df['本文'])
+    km = KMeans(n_clusters=3, random_state=42, n_init=10).fit(X)
+    df['クラスタ'] = km.labels_
+    st.dataframe(df[['年代','性別','肌質','評価','クラスタ']])
+    # 年代×クラスタ分布
+    st.subheader("🔍 年代 × クラスタ 分布")
+    seg = pd.crosstab(df['年代'], df['クラスタ'])
+    st.dataframe(seg)
+    # CSVダウンロード
+    csv = df.to_csv(index=False).encode('utf-8-sig')
+    st.download_button("CSVダウンロード", data=csv, file_name="cosme_reviews.csv", mime="text/csv")
