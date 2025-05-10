@@ -84,11 +84,8 @@ if submitted and url_input:
         st.stop()
 
     st.success(f"✅ {len(df)} 件のレビューを取得しました！")
-    # 属性分解（年代・性別・肌質）
-    parts = df['属性'].str.split(r'[・／\s]+', expand=True)
-    df['年代'] = parts.iloc[:, 0].fillna('不明')
-    df['性別'] = parts.iloc[:, 1].fillna('不明')
-    df['肌質'] = parts.iloc[:, 2].fillna('不明')
+    # 属性列はすでに分解済みのため、この処理は不要
+# df['年代'], df['性別'], df['肌質'] は get_reviews 関数で直接取得済み
 
     # メトリクス
     c1, c2, c3 = st.columns(3)
