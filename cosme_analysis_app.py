@@ -1,4 +1,5 @@
 import pandas as pd
+import re
 import requests
 from bs4 import BeautifulSoup
 import streamlit as st
@@ -43,7 +44,7 @@ def get_reviews(url):
     page = 1
     while True:
         # ページ番号付与
-        paged_url = f"{url}?pageno={page}"
+        paged_url = f"{url}?page={page}"
         resp = requests.get(paged_url, headers=headers)
         soup = BeautifulSoup(resp.text, "html.parser")
         items = soup.select(".c-section-review__item")
