@@ -57,16 +57,19 @@ def get_reviews(url: str, max_pages: int) -> pd.DataFrame:
             if score_tag:
                 num = re.sub(r"[^0-9.]", "", score_tag.text)
                 rating = float(num) if num else None
-            # 属性（レビューア情報）
-            info_tag = item.select_one("div.head div.reviewer-info")
-            profile_txt = info_tag.get_text(" ", strip=True) if info_tag else ""
+            # 年齢・肌質・性別: div.tag-list.clearfix li に順に入っている
+            tags = item.select("div.body div.tag-list.clearfix li")
+            tag_texts = [t.get_text(strip=True) for t in tags]
+            age = tag_texts[0] if len(tag_texts) > 0 else "不明"
+            skin = tag_texts[1] if len(tag_texts) > 1 else "不明"
+            sex = tag_texts[2] if len(tag_texts) > 2 else "不明"
             # 本文
             body_tag = item.select_one("div.body p:not(.reviewer-rating):not(.mobile-date)")
             body_txt = body_tag.get_text(strip=True) if body_tag else ""
             # 日付
             date_tag = item.select_one("div.body div.rating.clearfix p.mobile-date")
             date_txt = date_tag.text.strip() if date_tag else ""
-            reviews.append({"評価": rating, "属性": profile_txt, "本文": body_txt, "日付": date_txt})
+            reviews.append({"評価": rating, "年齢": age, "肌質": skin, "性別": sex, "本文": body_txt, "日付": date_txt})
     return pd.DataFrame(reviews)
 
 # ===== メイン =====
