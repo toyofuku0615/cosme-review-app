@@ -4,8 +4,7 @@ import requests
 from bs4 import BeautifulSoup
 import streamlit as st
 import matplotlib.pyplot as plt
-# 日本語フォント対応（rcParamsで指定）
-import matplotlib.pyplot as plt
+# 日本語フォント設定
 plt.rcParams['font.family'] = 'sans-serif'
 plt.rcParams['font.sans-serif'] = ['Yu Gothic','Meiryo','TakaoPGothic','Noto Sans CJK JP']
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -30,15 +29,20 @@ st.markdown(
 with st.sidebar:
     st.header("🔍 レビュー分析設定")
     url_input = st.text_input("@cosmeの商品ページ/レビューURLを入力", placeholder="例: https://www.cosme.net/products/10240630/review/")
+    max_pages = st.slider("最大ページ数", 1, 10, 3)
     submitted = st.button("分析開始")
 
 # ===== レビュー取得関数 =====
 def get_reviews(url: str, max_pages: int = 3) -> pd.DataFrame:
     session = requests.Session()
-    session.headers.update({"User-Agent": "Mozilla/5.0", "Accept-Language": "ja-JP,ja;q=0.9"})
-    # 商品ページをレビューURLに変換
+    session.headers.update({
+        "User-Agent": "Mozilla/5.0",
+        "Accept-Language": "ja-JP,ja;q=0.9"
+    })
+    # 商品ページからレビューURLに変換
     if not url.endswith("/review/"):
         url = url.rstrip("/") + "/review/"
+
     reviews = []
     for page in range(1, max_pages + 1):
         resp = session.get(f"{url}?page={page}", timeout=10)
@@ -49,7 +53,14 @@ def get_reviews(url: str, max_pages: int = 3) -> pd.DataFrame:
         for item in items:
             # 評価
             score_tag = item.select_one("div.body div.rating.clearfix p.reviewer-rating")
-            rating = float(re.sub(r"[^0-9.]", "", score_tag.text)) if score_tag else None
+            rating = None
+            if score_tag:
+                cleaned = re.sub(r"[^0-9.]", "", score_tag.text)
+                if cleaned:
+                    try:
+                        rating = float(cleaned)
+                    except ValueError:
+                        rating = None
             # 属性（年代 性別 肌質）
             info_tag = item.select_one("div.head div.reviewer-info")
             profile_txt = info_tag.get_text(" ", strip=True) if info_tag else ""
@@ -59,16 +70,22 @@ def get_reviews(url: str, max_pages: int = 3) -> pd.DataFrame:
             # 投稿日
             date_tag = item.select_one("div.body div.rating.clearfix p.mobile-date")
             date_txt = date_tag.text.strip() if date_tag else ""
-            reviews.append({"評価": rating, "属性": profile_txt, "本文": body_txt, "日付": date_txt})
+
+            reviews.append({
+                "評価": rating,
+                "属性": profile_txt,
+                "本文": body_txt,
+                "日付": date_txt
+            })
     return pd.DataFrame(reviews)
 
 # ===== メイン処理 =====
 st.title("💄 @cosme Review Insight")
-st.write("迅速にレビューを取得・分析します。日本語グラフ対応済み。最大3ページまで設定可能。")
+st.write("迅速にレビューを取得・分析します。日本語フォント対応。ページ数で速度調整可能。")
 
 if submitted and url_input:
     with st.spinner("レビュー取得中…"):
-        df = get_reviews(url_input)
+        df = get_reviews(url_input, max_pages)
     if df.empty:
         st.error("⚠️ レビューが取得できませんでした。URLを確認してください。")
         st.stop()
@@ -76,8 +93,8 @@ if submitted and url_input:
     # 成功メッセージ
     st.success(f"✅ {len(df)} 件のレビューを取得しました！")
 
-    # 属性分解：年代、性別、肌質 (・区切り)
-    parts = df['属性'].str.split('・', expand=True)
+    # 属性分解：年代・性別・肌質
+    parts = df['属性'].str.split(r'[\s・]+', expand=True)
     df['年代'] = parts[0].fillna('不明')
     df['性別'] = parts[1].fillna('不明')
     df['肌質'] = parts[2].fillna('不明')
@@ -132,7 +149,7 @@ if submitted and url_input:
     df['クラスタ'] = km.labels_
     st.dataframe(df[['年代','性別','肌質','評価','クラスタ']])
 
-    # 年代×クラスタ分布
+    # 年代×クラスタ 分布
     st.subheader("🔍 年代 × クラスタ 分布")
     seg = pd.crosstab(df['年代'], df['クラスタ'])
     st.dataframe(seg)
