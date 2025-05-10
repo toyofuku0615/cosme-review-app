@@ -4,8 +4,10 @@ import requests
 from bs4 import BeautifulSoup
 import streamlit as st
 import matplotlib.pyplot as plt
-import japanize_matplotlib
-japanize_matplotlib.japanize()
+# 日本語フォント対応（rcParamsで指定）
+import matplotlib.pyplot as plt
+plt.rcParams['font.family'] = 'sans-serif'
+plt.rcParams['font.sans-serif'] = ['Yu Gothic','Meiryo','TakaoPGothic','Noto Sans CJK JP']
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.cluster import KMeans
 from textblob import TextBlob
