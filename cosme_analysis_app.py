@@ -4,23 +4,26 @@ import requests
 from bs4 import BeautifulSoup
 import streamlit as st
 import matplotlib.pyplot as plt
-import japanize_matplotlib
+# 日本語フォント設定
+plt.rcParams['font.family'] = 'sans-serif'
+plt.rcParams['font.sans-serif'] = ['Arial Unicode MS','Yu Gothic','Meiryo','TakaoPGothic']
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.cluster import KMeans
 from textblob import TextBlob
 
 # ===== Streamlit ページ設定 & CSS =====
 st.set_page_config(page_title="@cosme Review Insight", page_icon="💄", layout="wide")
-st.markdown("""
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600&display=swap');
-html, body, [class*="css"] { font-family: 'Montserrat', sans-serif; }
-body { background: #FAF8FF; padding:1rem; }
-h1,h2,h3 { color:#7B1FA2; font-weight:600; }
-.stButton>button, .stDownloadButton>button { background:#7B1FA2; color:#fff; border:none; border-radius:8px; padding:0.5rem 1.2rem; font-weight:600; transition:0.3s; }
-.stButton>button:hover, .stDownloadButton>button:hover { background:#9B4DCC; }
-</style>
-""", unsafe_allow_html=True)
+st.markdown(
+    """
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600&display=swap');
+    html, body, [class*=\"css\"] { font-family: 'Montserrat', sans-serif; }
+    body { background: #FAF8FF; padding:1rem; }
+    h1,h2,h3 { color:#7B1FA2; font-weight:600; }
+    .stButton>button, .stDownloadButton>button { background:#7B1FA2; color:#fff; border:none; border-radius:8px; padding:0.5rem 1.2rem; font-weight:600; transition:0.3s; }
+    .stButton>button:hover, .stDownloadButton>button:hover { background:#9B4DCC; }
+    </style>
+    """, unsafe_allow_html=True)
 
 # ===== サイドバー設定 =====
 with st.sidebar:
@@ -49,7 +52,7 @@ def get_reviews(url: str, max_pages: int) -> pd.DataFrame:
             rating = float(re.sub(r"[^0-9.]", "", star.text)) if star else None
             prof = item.select_one("div.head div.reviewer-info")
             profile = prof.get_text(" ", strip=True) if prof else ""
-            body = item.select_one("div.body p:not(.reviewer-rating):not(.mobile-date)")
+            body = item.select_one("div.body > p:not(.reviewer-rating):not(.mobile-date)")
             text = body.get_text(strip=True) if body else ""
             date = item.select_one("div.body div.rating.clearfix p.mobile-date")
             date_txt = date.get_text(strip=True) if date else ""
@@ -58,7 +61,7 @@ def get_reviews(url: str, max_pages: int) -> pd.DataFrame:
 
 # ===== メイン =====
 st.title("💄 @cosme Review Insight")
-st.caption("迅速にコスメレビューを取得・分析します。最大ページ数で速度調整可能。日本語表示対応済み。")
+st.caption("迅速にコスメレビューを取得・分析します。最大ページ数で速度調整可能。日本語フォント対応済み。")
 
 if submitted and url_input:
     with st.spinner("レビュー取得中…"):
@@ -69,10 +72,7 @@ if submitted and url_input:
     else:
         st.success(f"✅ {len(df)} 件のレビューを取得しました！")
         # 属性分解
-        df[["年代","性別","肌質"]] = df["属性"].str.extract(r"(\d+代)\s*(男性|女性)?\s*(.*)")
-        df["年代"] = df["年代"].fillna("不明")
-        df["性別"] = df["性別"].fillna("不明")
-        df["肌質"] = df["肌質"].fillna("不明")
+        df[["年代","性別","肌質"]] = df["属性"].str.split("・", expand=True).iloc[:, :3].fillna("不明")
 
         # メトリクスカード
         c1, c2, c3 = st.columns(3)
