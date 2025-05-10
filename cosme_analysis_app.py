@@ -8,14 +8,14 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.cluster import KMeans
 from textblob import TextBlob
 
-# 日本語フォント設定（japanize_matplotlib 非使用）
+# 日本語フォント設定
 plt.rcParams['font.family'] = 'sans-serif'
 plt.rcParams['font.sans-serif'] = ['Yu Gothic', 'Meiryo', 'TakaoPGothic', 'Noto Sans CJK JP']
 
-# ===== Streamlit設定 =====
+# Streamlit設定
 st.set_page_config(page_title="@cosme Review Insight", page_icon="💄", layout="wide")
 
-# ===== CSS =====
+# CSS装飾
 st.markdown("""
 <style>
 body { background-color: #FAF8FF; }
@@ -25,21 +25,19 @@ h1, h2, h3 { color: #7B1FA2; font-weight: bold; }
 </style>
 """, unsafe_allow_html=True)
 
-# ===== サイドバー =====
+# サイドバー入力
 with st.sidebar:
     st.header("🔍 レビュー分析設定")
     url_input = st.text_input("@cosmeの商品ページ/レビューURLを入力", placeholder="例: https://www.cosme.net/products/10240630/review/")
     max_pages = st.slider("最大ページ数", 1, 5, 3)
     submitted = st.button("分析開始")
 
-# ===== レビュー取得関数 =====
 def get_reviews(url: str, max_pages: int) -> pd.DataFrame:
     session = requests.Session()
     session.headers.update({
         "User-Agent": "Mozilla/5.0",
         "Accept-Language": "ja-JP,ja;q=0.9"
     })
-
     if not url.endswith("/review/"):
         url = url.rstrip("/") + "/review/"
 
@@ -50,7 +48,6 @@ def get_reviews(url: str, max_pages: int) -> pd.DataFrame:
         items = soup.select("#product-review-list > div")
         if not items:
             break
-
         for item in items:
             # 評価
             score_tag = item.select_one("div.body div.rating.clearfix p.reviewer-rating")
@@ -59,9 +56,12 @@ def get_reviews(url: str, max_pages: int) -> pd.DataFrame:
                 num = re.sub(r"[^0-9.]", "", score_tag.text)
                 rating = float(num) if num else None
 
-            # 年齢・肌質・性別
+            # タグリスト取得とデバッグ表示
             tags = item.select("div.body div.tag-list.clearfix li")
             tag_texts = [t.get_text(strip=True) for t in tags]
+            st.write("DEBUG tags:", tag_texts)  # デバッグ出力：タグリストの中身
+
+            # 年齢・肌質・性別
             age = tag_texts[0] if len(tag_texts) > 0 else "不明"
             skin = tag_texts[1] if len(tag_texts) > 1 else "不明"
             sex = tag_texts[2] if len(tag_texts) > 2 else "不明"
@@ -82,12 +82,11 @@ def get_reviews(url: str, max_pages: int) -> pd.DataFrame:
                 "本文": body_txt,
                 "日付": date_txt
             })
-
     return pd.DataFrame(reviews)
 
-# ===== メイン画面 =====
+# メイン処理
 st.title("💄 @cosme Review Insight")
-st.write("迅速にレビューを取得・分析します。ページ数調整可能。日本語フォント対応。")
+st.write("迅速にレビューを取得・分析します。ページ数調整可能。")
 
 if submitted and url_input:
     with st.spinner("レビュー取得中…"):
@@ -98,13 +97,13 @@ if submitted and url_input:
 
     st.success(f"✅ {len(df)} 件のレビューを取得しました！")
 
-    # メトリクス表示
+    # メトリクス
     c1, c2, c3 = st.columns(3)
     c1.metric("平均評価", f"{df['評価'].mean():.2f}")
     c2.metric("ポジティブ率", f"{(df['評価']>=5).mean()*100:.1f}%")
     c3.metric("レビュー数", f"{len(df)}")
 
-    # 📊 年代別
+    # 年代別平均
     st.subheader("📊 年代別平均評価")
     fig1, ax1 = plt.subplots()
     df.groupby('年代')['評価'].mean().plot.bar(ax=ax1)
@@ -113,7 +112,7 @@ if submitted and url_input:
     plt.xticks(rotation=45, ha='right')
     st.pyplot(fig1)
 
-    # 📊 性別別
+    # 性別別平均
     st.subheader("📊 性別別平均評価")
     fig2, ax2 = plt.subplots()
     df.groupby('性別')['評価'].mean().plot.bar(ax=ax2)
@@ -122,7 +121,7 @@ if submitted and url_input:
     plt.xticks(rotation=0)
     st.pyplot(fig2)
 
-    # 📊 肌質別
+    # 肌質別平均
     st.subheader("📊 肌質別平均評価")
     fig3, ax3 = plt.subplots()
     df.groupby('肌質')['評価'].mean().plot.bar(ax=ax3)
@@ -131,7 +130,7 @@ if submitted and url_input:
     plt.xticks(rotation=45, ha='right')
     st.pyplot(fig3)
 
-    # 😊 感情スコア
+    # 感情スコア分布
     st.subheader("😊 感情スコア分布")
     df['感情'] = df['本文'].apply(lambda x: TextBlob(x).sentiment.polarity)
     fig4, ax4 = plt.subplots()
@@ -140,7 +139,7 @@ if submitted and url_input:
     ax4.set_ylabel('件数')
     st.pyplot(fig4)
 
-    # 👥 クラスタリング
+    # クラスタリング
     st.subheader("👥 レビュークラスタリング (3 clusters)")
     tfidf = TfidfVectorizer(max_features=30)
     X = tfidf.fit_transform(df['本文'])
@@ -148,12 +147,12 @@ if submitted and url_input:
     df['クラスタ'] = km.labels_
     st.dataframe(df[['年代','性別','肌質','評価','クラスタ']])
 
-    # 🔍 年代 × クラスタ
+    # 年代×クラスタ 分布
     st.subheader("🔍 年代 × クラスタ 分布")
     seg = pd.crosstab(df['年代'], df['クラスタ'])
     st.dataframe(seg)
 
-    # 💾 CSV ダウンロード
+    # CSVダウンロード
     st.download_button(
         label="CSVダウンロード",
         data=df.to_csv(index=False).encode('utf-8-sig'),
