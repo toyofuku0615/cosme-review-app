@@ -91,7 +91,7 @@ def get_reviews(url: str, max_pages: int) -> pd.DataFrame:
 
 # メイン画面
 st.title("💄 @cosme Review Insight")
-st.write("迅速にレビューを取得・分析します。ページ数調整可能。日本語フォント対応。")
+st.write("迅速にレビューを取得・分析します。ページ数調整可能。")
 
 if submitted and url_input:
     with st.spinner("レビュー取得中…"):
